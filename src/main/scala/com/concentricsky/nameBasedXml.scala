@@ -59,7 +59,7 @@ object nameBasedXml {
       }
 
       protected def transformXml = transformChild.andThen{ builderTree =>
-        q"$builderTree.render()"
+        q"$builderTree.build()"
       }
 
       protected def transformInterpolation(expression: Tree): Tree = {
