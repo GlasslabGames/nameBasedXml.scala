@@ -54,8 +54,10 @@ object nameBasedXml {
           if (minimizeEmpty && children.isEmpty) {
             q"$builderWithAttributes.selfClose()"
           } else {
-            children.foldLeft[Tree](q"$builderWithAttributes.childNodes")(addChild)
+            children.foldLeft[Tree](q"$builderWithAttributes.nodeList")(addChild)
           }
+        case NodeBuffer(nodes) =>
+          nodes.foldLeft[Tree](q"$defaultPrefix.nodeList")(addChild)
       }
 
       protected def transformXml = transformChild.andThen{ builderTree =>
@@ -114,7 +116,7 @@ object nameBasedXml {
   *   case class attribute1(attributeValue: Any)
   *   case class tagName2() {
   *     def render() = this
-  *     def childNodes = this
+  *     def nodeList = this
   *     def selfClose() = this
   *     def apply(child: Any) = this
   *   }
@@ -126,7 +128,7 @@ object nameBasedXml {
   *     prefix2Attribute3Option: Option[Any] = None
   * ) {
   *     def render() = this
-  *     def childNodes = this
+  *     def nodeList = this
   *     def selfClose() = this
   *     def attribute1(attributeValue: Any) = copy(attribute1Option = Some(attributeValue))
   *     def attribute2(attributeValue: Any) = copy(attribute2Option = Some(attributeValue))
