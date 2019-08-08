@@ -98,7 +98,7 @@ object nameBasedXml {
           c.error(c.enclosingPosition, "Expect def or val")
           annottees.head
       }
-         c.info(c.enclosingPosition, show(result), true)
+      // c.info(c.enclosingPosition, show(result), true)
       result
     }
 
