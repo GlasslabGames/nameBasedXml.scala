@@ -69,7 +69,7 @@ object nameBasedXml {
       }
 
       protected def addChild(builder: Tree, child: Tree): Tree = {
-        q"$builder(${transformChild.applyOrElse(child, transformInterpolation)})"
+        q"$builder += ${transformChild.applyOrElse(child, transformInterpolation)}"
       }
 
       override def transform(tree: Tree): Tree = {
@@ -115,7 +115,7 @@ object nameBasedXml {
   * object prefix1 {
   *   case class attribute1(attributeValue: Any)
   *   case class tagName2() {
-  *     def render() = this
+  *     def build() = this
   *     def nodeList = this
   *     def selfClose() = this
   *     def apply(child: Any) = this
@@ -127,7 +127,7 @@ object nameBasedXml {
   *     attribute2Option: Option[Any] = None,
   *     prefix2Attribute3Option: Option[Any] = None
   * ) {
-  *     def render() = this
+  *     def build() = this
   *     def nodeList = this
   *     def selfClose() = this
   *     def attribute1(attributeValue: Any) = copy(attribute1Option = Some(attributeValue))
