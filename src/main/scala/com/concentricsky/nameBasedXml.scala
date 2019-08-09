@@ -1,5 +1,6 @@
 package com.concentricsky
 
+import com.thoughtworks.Extractor._
 import com.thoughtworks.binding.XmlExtractor
 import scala.reflect.macros.whitebox
 import scala.annotation._
@@ -12,6 +13,19 @@ object nameBasedXml {
 
   class Macros(val c: whitebox.Context) extends XmlExtractor {
     import c.universe._
+
+    // TODO: Move to [[com.thoughtworks.binding.XmlExtractor]]
+    private def pcData: PartialFunction[Tree, String] = {
+      case q"""
+        new _root_.scala.xml.PCData(
+          ${Literal(Constant(data: String))},
+        )
+      """ =>
+        data
+    }
+
+    // TODO: Move to [[com.thoughtworks.binding.XmlExtractor]]
+    private final val PCData = pcData.extract
 
     protected class NameBasedXmlTransformer(defaultPrefix: Tree) extends Transformer {
 
@@ -57,8 +71,10 @@ object nameBasedXml {
           }
         case NodeBuffer(nodes) =>
           nodes.foldLeft[Tree](q"$defaultPrefix.withNodeList")(withChild)
+        case PCData(data) =>
+        q"$defaultPrefix.cdata($data)"
         case Comment(data) =>
-          q"$defaultPrefix.comment($data)"
+        q"$defaultPrefix.comment($data)"
         case EntityRef(entityName) =>
           q"$defaultPrefix.entities.${TermName(entityName)}"
         case ProcInstr(target, data) =>
