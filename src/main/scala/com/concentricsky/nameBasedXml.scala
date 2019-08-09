@@ -61,6 +61,9 @@ object nameBasedXml {
           q"$defaultPrefix.comment($data)"
         case EntityRef(entityName) =>
           q"$defaultPrefix.entities.${TermName(entityName)}"
+        case ProcInstr(target, data) =>
+          q"$defaultPrefix.processInstructions.${TermName(target)}($data)"
+        // TODO CDATA
       }
 
       protected def transformXml = transformChild.andThen { builderTree =>
