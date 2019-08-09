@@ -78,6 +78,8 @@ val builder = xml.elements.`tag-name`
   .build()
 ```
 
+Note that attributes with a prefix becomes function calls on the prefix, and attributes without a prefix becomes method calls on the builder.
+
 #### CDATA
 
 `<![CDATA[ raw ]]>` will be translated to `xml.text(" raw ")` if `-Xxml:coalescing` flag is on, or `xml.cdata(" raw ")` if the flag is turned off as `-Xxml:-coalescing` .
@@ -112,19 +114,19 @@ will be translated to
 xml.elements.`tag-name`
   .withAttribute.`attribute-1`(xml.text("value"))
   .withNodeList
-    .withChild(xml.text("\n  text ")
+    .withChild(xml.text("\n  text "))
     .withChild(xml.entities.amp)
-    .withChild(xml.text(" hexadecimal reference ")
+    .withChild(xml.text(" hexadecimal reference "))
     .withChild(xml.entities.AMP)
-    .withChild(xml.text(" decimal reference\n  ")
+    .withChild(xml.text(" decimal reference\n  "))
     .withChild(xml.elements.`child-1`.withoutNodeList
-    .withChild(xml.text("\n  ")
+    .withChild(xml.text("\n  "))
     .withChild(xml.comment(" my comment "))
-    .withChild(xml.text("\n  ")
+    .withChild(xml.text("\n  "))
     .withChild(xml.interpolation(math.random))
-    .withChild(xml.text("\n  ")
+    .withChild(xml.text("\n  "))
     .withChild(xml.cdata(" raw ")) // .withChild(xml.text(" raw "))  if `-Xxml:coalescing` flag is set
-    .withChild(xml.text("\n  ")
+    .withChild(xml.text("\n  "))
   .build()
 ```
 
