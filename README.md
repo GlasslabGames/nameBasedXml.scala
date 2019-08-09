@@ -15,6 +15,7 @@ Considering the success of the above name-based syntactic sugars, in order to de
 * Schema-aware XML literals should be understandable by both the compiler and IDE (e.g. no white box macros involved)
 * Existing libraries like ScalaTag should be able to support XML literals by adding a few simple wrapper classes. No macro or metaprogramming knowledge is required for library authors.
 * The compiler should expose as less as possible number of special names, in case of being *intolerably ugly* .
+* Able to implement an API to build a DOM tree with no more cost than manually written Scala code.
 
 ## Non-goals
 
@@ -30,7 +31,8 @@ Kept unchanged from Scala 2.12
 
 ### XML literal translation
 
-Scala compiler will translate XML literal to Scala AST before type checking. The translation rules are:
+Scala compiler will translate XML literal to Scala AST before type checking.
+The translation rules are:
 
 #### Self-closing tags without prefixes
 
@@ -152,6 +154,11 @@ An XML library user can switch different implementations by importing different 
 In a schema-aware XML library like Binding.scala, its `elements` , `attributes` , `processInstructions` and `entities` methods should return factory objects that contain all the definitions of available tag names and attribute names. An XML library user can provide additional tag names and attribute names in user-defined implicit classes for `tags` and `attributes` .
 
 In a schema-less XML library like `scala-xml` , its `elements` , `attributes` , `processInstructions` and `entities` should return builders that extend [scala.Dynamic](https://www.scala-lang.org/api/current/scala/Dynamic.html) in order to handle tag names and attribute names in `selectDynamic` or `applyDynamic` .
+
+Those builders can be either mutable or immutable. 
+* If a builder object is an immutable case class, each `withXxx` method should return a new builder, by invoking `copy` method of the case class.
+* If a builder object is a mutable class, each `withXxx` method should change its internal states and return `this`.
+* If a builder object is a value class backed by a mutable DOM node, each `withXxx` method should change the internal mutable node and return `this`. Especially, when all its methods are inlined, it should as efficient as manually written Scala code to create DOM nodes.
 
 ### Known issues
 
