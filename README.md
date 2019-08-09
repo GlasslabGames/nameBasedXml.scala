@@ -41,7 +41,7 @@ Scala compiler will translate XML literal to Scala AST before type checking. The
 will be translated to
 
 ```
-xml.tags.`tag-name`()
+xml.elements.`tag-name`.withoutNodeList.build()
 ```
 
 #### Self-closing tags with some prefixes
@@ -53,7 +53,7 @@ xml.tags.`tag-name`()
 will be translated to
 
 ```
-xml.tags.`prefix-1`.`tag-name`()
+`prefix-1`.elements.`tag-name`.withoutNodeList.build()
 ```
 
 #### Attributes
@@ -67,11 +67,13 @@ xml.tags.`prefix-1`.`tag-name`()
 will be translated to
 
 ```
-xml.tags.`tag-name`(
-  xml.attributes.`attribute-1`(xml.text("value")),
-  xml.attributes.`attribute-2`(xml.interpolation(f())),
-  xml.attributes.`prefix-2`.`attribute-3`(xml.interpolation("value"))
-)
+val builder = xml.elements.`tag-name`
+  .withAttribute.`attribute-1`("value")
+  .withAttribute.`attribute-2`(xml.interpolation(f()))
+    
+`prefix-2`.withAttribute.`attribute-3`(builder, xml.interpolation("value"))
+  .withoutNodeList
+  .build()
 ```
 
 #### CDATA
@@ -105,28 +107,23 @@ xml.processInstructions.`xml-stylesheet`("type=\"text/xsl\" href=\"sty.xsl\"")
 will be translated to
 
 ```
-xml.tags.`tag-name`(
-  xml.attributes.`attribute-1`(xml.text("value")),
-  xml.text("""
-  text """),
-  xml.entities.amp,
-  xml.text(""" hexadecimal reference """),
-  xml.entities.AMP,
-  xml.text(""" decimal reference
-  """),
-  xml.tags.`child-1`(),
-  xml.text("""
-  """),
-  xml.comment(" my comment "),
-  xml.text("""
-  """),
-  xml.interpolation(math.random),
-  xml.text("""
-  """),
-  xml.cdata(" raw "), // or xml.text(" raw ") if `-Xxml:coalescing` flag is set
-  xml.text("""
-""")
-)
+xml.elements.`tag-name`
+  .withAttribute.`attribute-1`(xml.text("value"))
+  .withNodeList
+    .withChild(xml.text("\n  text ")
+    .withChild(xml.entities.amp)
+    .withChild(xml.text(" hexadecimal reference ")
+    .withChild(xml.entities.AMP)
+    .withChild(xml.text(" decimal reference\n  ")
+    .withChild(xml.elements.`child-1`.withoutNodeList
+    .withChild(xml.text("\n  ")
+    .withChild(xml.comment(" my comment "))
+    .withChild(xml.text("\n  ")
+    .withChild(xml.interpolation(math.random))
+    .withChild(xml.text("\n  ")
+    .withChild(xml.cdata(" raw ")) // .withChild(xml.text(" raw "))  if `-Xxml:coalescing` flag is set
+    .withChild(xml.text("\n  ")
+  .build()
 ```
 
 Note that hexadecimal references and decimal references will be unescaped and translated to `xml.text()` automatically, while entity references are translated to fields in `xml.entities` .
@@ -135,8 +132,7 @@ Note that hexadecimal references and decimal references will be unescaped and tr
 
 An XML library vendor should provide a package or object named `xml` , which contains the following methods or values:
 
-* tags
-* attributes
+* elements
 * entities
 * processInstructions
 * text
@@ -146,15 +142,15 @@ An XML library vendor should provide a package or object named `xml` , which con
 
 An XML library user can switch different implementations by importing different `xml` packages or objects. `scala.xml` is used by default when no explicit import is present.
 
-In a schema-aware XML library like Binding.scala, its `tags` , `attributes` , `processInstructions` and `entities` methods should return factory objects that contain all the definitions of available tag names and attribute names. An XML library user can provide additional tag names and attribute names in user-defined implicit classes for `tags` and `attributes` .
+In a schema-aware XML library like Binding.scala, its `elements` , `attributes` , `processInstructions` and `entities` methods should return factory objects that contain all the definitions of available tag names and attribute names. An XML library user can provide additional tag names and attribute names in user-defined implicit classes for `tags` and `attributes` .
 
-In a schema-less XML library like `scala-xml` , its `tags` , `attributes` , `processInstructions` and `entities` should return builders that extend [scala.Dynamic](https://www.scala-lang.org/api/current/scala/Dynamic.html) in order to handle tag names and attribute names in `selectDynamic` or `applyDynamic` .
+In a schema-less XML library like `scala-xml` , its `elements` , `attributes` , `processInstructions` and `entities` should return builders that extend [scala.Dynamic](https://www.scala-lang.org/api/current/scala/Dynamic.html) in order to handle tag names and attribute names in `selectDynamic` or `applyDynamic` .
 
 ### Known issues
 
 #### Name clash
 
-`<toString/>` or `<foo toString="bar"/>` will not compile due to name clash to `Any.toString` .
+`<toString/>` or `<foo equals="bar"/>` will not compile due to name clash to `Any.toString` and `Any.equals` .
 
 * Compilation error is the desired behavior in a schema-aware XML library as long as `toString` is not a valid name in the schema. Fortunately, unlike JSX, `<div class="foo"></div>` should compile because `class` is a valid method name.
 * A schema-less XML library user should instead explicit construct `new Elem("toString")` .
