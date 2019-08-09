@@ -32,8 +32,8 @@ object nameBasedXml {
             q"$builder.withAttribute.${TermName(localPart)}"
         }
         attributeValue match {
-          case Text(textValue) =>
-            q"$builderWithAttributeName($defaultPrefix.text($textValue))"
+          case TextAttribute(textValue) =>
+            q"$builderWithAttributeName($textValue)"
           case expression =>
             q"$builderWithAttributeName(${transformInterpolation(expression)})"
         }
