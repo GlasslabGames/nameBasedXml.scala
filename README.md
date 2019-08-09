@@ -188,6 +188,10 @@ Those builders can be either mutable or immutable.
 > a match { case <a><b/></a> => () }
 > ```
 
+### Pattern matching
+
+This approach does not support XML pattern matching.
+
 ## Alternative approach
 
 XML initialization can be implemented in a special string interpolation as `xml"<x/>"` . The pros and cons of these approaches are list in the following table:
