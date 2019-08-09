@@ -140,6 +140,13 @@ An XML library vendor should provide a package or object named `xml` , which con
 * cdata
 * interpolation
 
+Each of those methods should return a builder, which contains a `build()` method to create an XML object. In addition, builders for elements should contains the following methods or values:
+
+* withAttributes
+* withNodeList
+* withChild
+* withoutNodeList
+
 An XML library user can switch different implementations by importing different `xml` packages or objects. `scala.xml` is used by default when no explicit import is present.
 
 In a schema-aware XML library like Binding.scala, its `elements` , `attributes` , `processInstructions` and `entities` methods should return factory objects that contain all the definitions of available tag names and attribute names. An XML library user can provide additional tag names and attribute names in user-defined implicit classes for `tags` and `attributes` .
