@@ -16,21 +16,20 @@ object nameBasedXml {
     protected class NameBasedXmlTransformer(defaultPrefix: Tree) extends Transformer {
 
       protected def tagBuilder(tagName: QName) = {
-        val tagFunction = tagName match {
+        tagName match {
           case PrefixedName(prefix, localPart) =>
             q"${Ident(TermName(prefix))}.elements.${TermName(localPart)}"
           case UnprefixedName(localPart) =>
             q"$defaultPrefix.elements.${TermName(localPart)}"
         }
-        q"$tagFunction()"
       }
 
-      protected def addAttribute(builder: Tree, attributeName: QName, attributeValue: Tree) = {
+      protected def withAttribute(builder: Tree, attributeName: QName, attributeValue: Tree) = {
         val builderWithAttributeName = attributeName match {
           case PrefixedName(prefix, localPart) =>
-            q"${Ident(TermName(prefix))}.attributes.${TermName(localPart)}($builder)"
+            q"${Ident(TermName(prefix))}.withAttribute.${TermName(localPart)}($builder)"
           case UnprefixedName(localPart) =>
-            q"$builder.attributes.${TermName(localPart)}"
+            q"$builder.withAttribute.${TermName(localPart)}"
         }
         attributeValue match {
           case Text(textValue) =>
@@ -48,20 +47,20 @@ object nameBasedXml {
 
           val builderWithAttributes = attributes.foldLeft[Tree](builder) {
             case (accumulator, (attributeName, attributeValue)) =>
-              addAttribute(accumulator, attributeName, attributeValue)
+              withAttribute(accumulator, attributeName, attributeValue)
           }
 
           if (minimizeEmpty && children.isEmpty) {
-            q"$builderWithAttributes.selfClose()"
+            q"$builderWithAttributes.withoutNodeList"
           } else {
-            children.foldLeft[Tree](q"$builderWithAttributes.nodeList")(addChild)
+            children.foldLeft[Tree](q"$builderWithAttributes.withNodeList")(withChild)
           }
         case NodeBuffer(nodes) =>
-          nodes.foldLeft[Tree](q"$defaultPrefix.nodeList")(addChild)
+          nodes.foldLeft[Tree](q"$defaultPrefix.withNodeList")(withChild)
         case Comment(data) =>
           q"$defaultPrefix.comment($data)"
         case EntityRef(entityName) =>
-          q"$defaultPrefix.entities.${TermName(entityName)}()"
+          q"$defaultPrefix.entities.${TermName(entityName)}"
       }
 
       protected def transformXml = transformChild.andThen { builderTree =>
@@ -72,8 +71,8 @@ object nameBasedXml {
         q"$defaultPrefix.interpolation(${super.transform(expression)})"
       }
 
-      protected def addChild(builder: Tree, child: Tree): Tree = {
-        q"$builder += ${transformChild.applyOrElse(child, transformInterpolation)}"
+      protected def withChild(builder: Tree, child: Tree): Tree = {
+        q"$builder.withChild(${transformChild.applyOrElse(child, transformInterpolation)})"
       }
 
       override def transform(tree: Tree): Tree = {
@@ -117,31 +116,32 @@ object nameBasedXml {
   *
   * {{{
   * object prefix1 {
-  *   object attributes {
+  *   object withAttribute {
   *     case class attribute1(attributeValue: Any)
   *   }
   *   object elements {
-  *     case class tagName2() {
+  *     case object tagName2 {
   *       def build() = this
-  *       def nodeList = this
-  *       def selfClose() = this
+  *       def withNodeList = this
+  *       def withoutNodeList = this
   *       def apply(child: Any) = this
   *     }
   *   }
   * }
   * object xml {
   *   object elements {
-  *     case class tagName1(
+  *     def tagName1 = TagName1()
+  *     case class TagName1(
   *       attribute1Option: Option[Any] = None,
   *       attribute2Option: Option[Any] = None,
   *       prefix2Attribute3Option: Option[Any] = None
-  *     ) {
+  *     ) { self =>
   *       def build() = this
-  *       def nodeList = this
-  *       def selfClose() = this
-  *       object attributes {
-  *         def attribute1(attributeValue: Any) = tagName1.this.copy(attribute1Option = Some(attributeValue))
-  *         def attribute2(attributeValue: Any) = tagName1.this.copy(attribute2Option = Some(attributeValue))
+  *       def withNodeList = this
+  *       def withoutNodeList = this
+  *       object withAttribute {
+  *         def attribute1(attributeValue: Any) = self.copy(attribute1Option = Some(attributeValue))
+  *         def attribute2(attributeValue: Any) = self.copy(attribute2Option = Some(attributeValue))
   *       }
   *     }
   *   }
@@ -150,8 +150,8 @@ object nameBasedXml {
   * }
   *
   * object prefix2 {
-  *   object attributes {
-  *     case class attribute3[A](element: xml.elements.tagName1) {
+  *   object withAttribute {
+  *     case class attribute3[A](element: xml.elements.TagName1) {
   *       def apply(attributeValue: Any) = element.copy(prefix2Attribute3Option = Some(attributeValue))
   *     }
   *   }
@@ -162,14 +162,14 @@ object nameBasedXml {
   * {{{
   * @nameBasedXml
   * def myXml = <tagName1/>
-  * myXml should be(xml.elements.tagName1())
+  * myXml should be(xml.elements.tagName1)
   * }}}
   *
   * @example Self-closing tags with some prefixes
   * {{{
   * @nameBasedXml
   * def myXml = <prefix1:tagName2/>
-  * myXml should be(prefix1.elements.tagName2())
+  * myXml should be(prefix1.elements.tagName2)
   * }}}
   *
   * @example Attributes
@@ -177,12 +177,12 @@ object nameBasedXml {
   * case class f()
   *
   * @nameBasedXml
-  * def myXml: xml.elements.tagName1 = <tagName1 attribute1="value"
+  * def myXml: xml.elements.TagName1 = <tagName1 attribute1="value"
   *   attribute2={ f() }
   *   prefix2:attribute3={"value"}
   * />
   * myXml should be(
-  *   xml.elements.tagName1(
+  *   xml.elements.TagName1(
   *     attribute1Option=Some(xml.text("value")),
   *     attribute2Option=Some(xml.interpolation(f())),
   *     prefix2Attribute3Option=Some(xml.interpolation("value")),
