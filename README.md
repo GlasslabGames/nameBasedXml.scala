@@ -1,0 +1,1 @@
+# Name based XML literals
