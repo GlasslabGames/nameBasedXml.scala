@@ -36,31 +36,50 @@ The translation rules are:
 
 #### Self-closing tags without prefixes
 
-```
+``` scala
 <tag-name />
 ```
 
 will be translated to
 
-```
-xml.elements.`tag-name`.withoutNodeList.build()
+``` scala
+xml.literal(
+  xml.elements.`tag-name`.withoutNodeList.build()
+)
 ```
 
 #### Self-closing tags with some prefixes
 
-```
+``` scala
 <prefix-1:tag-name />
 ```
 
 will be translated to
 
-```
-`prefix-1`.elements.`tag-name`.withoutNodeList.build()
+``` scala
+xml.literal(
+  `prefix-1`.elements.`tag-name`()
+)
 ```
 
+#### Node list
+
+``` scala
+<tag-name />
+<prefix-1:tag-name />
+```
+
+will be translated to
+
+``` scala
+xml.literal(
+  xml.elements.`tag-name`(),
+  `prefix-1`.elements.`tag-name`()
+)
+```
 #### Attributes
 
-```
+``` scala
 <tag-name attribute-1="value"
           attribute-2={ f() }
           prefix-2:attribute-3={"value"} />
@@ -68,37 +87,39 @@ will be translated to
 
 will be translated to
 
-```
-val builder = xml.elements.`tag-name`
-  .withAttribute.`attribute-1`("value")
-  .withAttribute.`attribute-2`(xml.interpolation(f()))
-    
-`prefix-2`.withAttribute.`attribute-3`(builder, xml.interpolation("value"))
-  .withoutNodeList
-  .build()
+``` scala
+xml.literal(
+  xml.elements.`tag-name`(
+    xml.attributes.`attribute-1`("value")
+    xml.attributes.`attribute-2`(xml.interpolation(f()))
+    `prefix-2`.attributes.`attribute-3`(xml.interpolation("value"))
+  )
+)
 ```
 
 Note that attributes with a prefix becomes function calls on the prefix, and attributes without a prefix becomes method calls on the builder.
 
 #### CDATA
 
-`<![CDATA[ raw ]]>` will be translated to `xml.text(" raw ")` if `-Xxml:coalescing` flag is on, or `xml.cdata(" raw ")` if the flag is turned off as `-Xxml:-coalescing` .
+`<![CDATA[ raw ]]>` will be translated to `xml.literal(xml.text(" raw "))` if `-Xxml:coalescing` flag is on, or `xml.literal(xml.cdata(" raw "))` if the flag is turned off as `-Xxml:-coalescing` .
 
 #### Process instructions
 
-```
+``` scala
 <?xml-stylesheet type="text/xsl" href="sty.xsl"?>
 ```
 
 will be translated to
 
-```
-xml.processInstructions.`xml-stylesheet`("type=\"text/xsl\" href=\"sty.xsl\"")
+``` scala
+xml.literal(
+  xml.processInstructions.`xml-stylesheet`("type=\"text/xsl\" href=\"sty.xsl\"")
+)
 ```
 
 #### Child nodes
 
-```
+``` scala
 <tag-name attribute-1="value">
   text &amp; &#x68;exadecimal reference &AMP; &#100;ecimal reference
   <child-1/>
@@ -110,24 +131,25 @@ xml.processInstructions.`xml-stylesheet`("type=\"text/xsl\" href=\"sty.xsl\"")
 
 will be translated to
 
-```
-xml.elements.`tag-name`
-  .withAttribute.`attribute-1`(xml.text("value"))
-  .withNodeList
-    .withChild(xml.text("\n  text "))
-    .withChild(xml.entities.amp)
-    .withChild(xml.text(" hexadecimal reference "))
-    .withChild(xml.entities.AMP)
-    .withChild(xml.text(" decimal reference\n  "))
-    .withChild(xml.elements.`child-1`.withoutNodeList
-    .withChild(xml.text("\n  "))
-    .withChild(xml.comment(" my comment "))
-    .withChild(xml.text("\n  "))
-    .withChild(xml.interpolation(math.random))
-    .withChild(xml.text("\n  "))
-    .withChild(xml.cdata(" raw ")) // .withChild(xml.text(" raw "))  if `-Xxml:coalescing` flag is set
-    .withChild(xml.text("\n  "))
-  .build()
+``` scala
+xml.literal(
+  xml.elements.`tag-name`(
+    xml.`attribute-1`(xml.text("value")),
+    xml.text("\n  text "),
+    xml.entities.amp,
+    xml.text(" hexadecimal reference "),
+    xml.entities.AMP,
+    xml.text(" decimal reference\n  "),
+    xml.elements.`child-1`.withoutNodeLis,
+    xml.text("\n  "),
+    xml.comment(" my comment "),
+    xml.text("\n  "),
+    xml.interpolation(math.random),
+    xml.text("\n  "),
+    xml.cdata(" raw "), //  or (xml.text(" raw ")), if `-Xxml:coalescing` flag is set
+    xml.text("\n  ")
+  )
+)
 ```
 
 Note that hexadecimal references and decimal references will be unescaped and translated to `xml.text()` automatically, while entity references are translated to fields in `xml.entities` .
@@ -137,30 +159,22 @@ Note that hexadecimal references and decimal references will be unescaped and tr
 An XML library vendor should provide a package or object named `xml` , which contains the following methods or values:
 
 * elements
+* attributes
 * entities
 * processInstructions
 * text
 * comment
 * cdata
 * interpolation
+* literal
 
-Each of those methods should return a builder, which contains a `build()` method to create an XML object. In addition, builders for elements should contains the following methods or values:
-
-* withAttributes
-* withNodeList
-* withChild
-* withoutNodeList
+All above methods except `literal` should return a builder, and `literal` will turn one or more builders into an XML object / or an XML node list.
 
 An XML library user can switch different implementations by importing different `xml` packages or objects. `scala.xml` is used by default when no explicit import is present.
 
 In a schema-aware XML library like Binding.scala, its `elements` , `attributes` , `processInstructions` and `entities` methods should return factory objects that contain all the definitions of available tag names and attribute names. An XML library user can provide additional tag names and attribute names in user-defined implicit classes for `tags` and `attributes` .
 
 In a schema-less XML library like `scala-xml` , its `elements` , `attributes` , `processInstructions` and `entities` should return builders that extend [scala.Dynamic](https://www.scala-lang.org/api/current/scala/Dynamic.html) in order to handle tag names and attribute names in `selectDynamic` or `applyDynamic` .
-
-Those builders can be either mutable or immutable. 
-* If a builder object is an immutable case class, each `withXxx` method should return a new builder, by invoking `copy` method of the case class.
-* If a builder object is a mutable class, each `withXxx` method should change its internal states and return `this`.
-* If a builder object is a value class backed by a mutable DOM node, each `withXxx` method should change the internal mutable node and return `this`. Especially, when all its methods are inlined, it should as efficient as manually written Scala code to create DOM nodes.
 
 ### Known issues
 
@@ -188,13 +202,9 @@ Those builders can be either mutable or immutable.
 > a match { case <a><b/></a> => () }
 > ```
 
-### Pattern matching
-
-This approach does not support XML pattern matching.
-
 ## Alternative approach
 
-XML initialization can be implemented in a special string interpolation as `xml"<x/>"` . The pros and cons of these approaches are list in the following table:
+XML initialization can be implemented in a special string interpolation as `xml"<x/>"`, which can be implemented in a macro library. The pros and cons of these approaches are list in the following table:
 
 ||symbol-based XML literals in Scala 2.12|name-based XML literals in this proposal|`xml` string interpolation|
 | --- | --- | --- | --- |

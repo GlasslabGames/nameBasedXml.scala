@@ -8,6 +8,7 @@ import scala.language.experimental.macros
 import com.thoughtworks.binding.XmlExtractor.PrefixedName
 import com.thoughtworks.binding.XmlExtractor.UnprefixedName
 import com.thoughtworks.binding.XmlExtractor.QName
+import scala.xml.NodeBuffer
 
 object nameBasedXml {
 
@@ -15,10 +16,20 @@ object nameBasedXml {
     import c.universe._
 
     // TODO: Move to [[com.thoughtworks.binding.XmlExtractor]]
+    private def textAttributes: PartialFunction[Tree, Seq[Tree]] = {
+      case text @ (Text(_) | EntityRef(_))                     => Seq(text)
+      case EmptyAttribute()                                    => Nil
+      case NodeBuffer(texts @ ((Text(_) | EntityRef(_)) +: _)) => texts
+    }
+
+    // TODO: Move to [[com.thoughtworks.binding.XmlExtractor]]
+    protected final val TextAttributes = textAttributes.extract
+
+    // TODO: Move to [[com.thoughtworks.binding.XmlExtractor]]
     private def pcData: PartialFunction[Tree, String] = {
       case q"""
         new _root_.scala.xml.PCData(
-          ${Literal(Constant(data: String))},
+          ${Literal(Constant(data: String))}
         )
       """ =>
         data
@@ -38,64 +49,78 @@ object nameBasedXml {
         }
       }
 
-      protected def withAttribute(builder: Tree, attributeName: QName, attributeValue: Tree) = {
-        val builderWithAttributeName = attributeName match {
-          case PrefixedName(prefix, localPart) =>
-            q"${Ident(TermName(prefix))}.withAttribute.${TermName(localPart)}($builder)"
-          case UnprefixedName(localPart) =>
-            q"$builder.withAttribute.${TermName(localPart)}"
-        }
+      protected def transformAttribute(parentPrefix: Tree, attributeName: QName, attributeValue: Tree) = {
+        val attributeFunction =
+          q"${prefixTree(parentPrefix, attributeName)}.attributes.${TermName(localName(attributeName))}"
         attributeValue match {
-          case TextAttribute(textValue) =>
-            q"$builderWithAttributeName($textValue)"
+          case TextAttributes(textValues) =>
+            val transformedTexts = textValues.map(transformText(parentPrefix))
+            q"$attributeFunction(..$transformedTexts)"
           case expression =>
-            q"$builderWithAttributeName(${transformInterpolation(expression)})"
+            q"$attributeFunction(${transformInterpolation(parentPrefix,expression)})"
         }
       }
 
-      protected def transformChild: PartialFunction[Tree, Tree] = {
+      private def localName(qName: QName) = qName match {
+        case PrefixedName(prefix, localPart) =>
+          localPart
+        case UnprefixedName(localPart) =>
+          localPart
+      }
+
+      private def prefixTree(defaultPrefix: Tree, qName: QName) = qName match {
+        case PrefixedName(prefix, localPart) =>
+          Ident(TermName(prefix))
+        case UnprefixedName(localPart) =>
+          defaultPrefix
+      }
+      protected def transformText(parentPrefix: Tree): PartialFunction[Tree, Tree] = {
         case Text(value) =>
-          q"$defaultPrefix.text($value)"
-        case Elem(tagName, attributes, minimizeEmpty, children) =>
-          val builder = tagBuilder(tagName)
-
-          val builderWithAttributes = attributes.foldLeft[Tree](builder) {
-            case (accumulator, (attributeName, attributeValue)) =>
-              withAttribute(accumulator, attributeName, attributeValue)
-          }
-
-          if (minimizeEmpty && children.isEmpty) {
-            q"$builderWithAttributes.withoutNodeList"
-          } else {
-            children.foldLeft[Tree](q"$builderWithAttributes.withNodeList")(withChild)
-          }
-        case NodeBuffer(nodes) =>
-          nodes.foldLeft[Tree](q"$defaultPrefix.withNodeList")(withChild)
-        case PCData(data) =>
-        q"$defaultPrefix.cdata($data)"
-        case Comment(data) =>
-        q"$defaultPrefix.comment($data)"
+          q"$parentPrefix.text($value)"
         case EntityRef(entityName) =>
-          q"$defaultPrefix.entities.${TermName(entityName)}"
-        case ProcInstr(target, data) =>
-          q"$defaultPrefix.processInstructions.${TermName(target)}($data)"
-        // TODO CDATA
+          q"$parentPrefix.entities.${TermName(entityName)}"
       }
 
-      protected def transformXml = transformChild.andThen { builderTree =>
-        q"$builderTree.build()"
+      protected def transformNode(parentPrefix: Tree): PartialFunction[Tree, Tree] = {
+        transformText(parentPrefix).orElse {
+          case Elem(tagName, attributes, minimizeEmpty, children) =>
+            val prefix = prefixTree(defaultPrefix, tagName)
+            val factory = q"$prefix.elements.${TermName(localName(tagName))}"
+
+            val transformedAttributes = attributes.view.reverse.map {
+              case (attributeName, attributeValue) =>
+                transformAttribute(parentPrefix, attributeName, attributeValue)
+            }
+
+            val transformedChildren = children.map {
+              transformNode(parentPrefix).applyOrElse(_, transformInterpolation(parentPrefix, _))
+            }
+
+            q"$factory(..${transformedAttributes.toList}, ..$transformedChildren)"
+          case PCData(data) =>
+            q"$parentPrefix.cdata($data)"
+          case Comment(data) =>
+            q"$parentPrefix.comment($data)"
+          case ProcInstr(target, data) =>
+            q"$parentPrefix.processInstructions.${TermName(target)}($data)"
+        }
       }
 
-      protected def transformInterpolation(expression: Tree): Tree = {
-        q"$defaultPrefix.interpolation(${super.transform(expression)})"
+      protected def transformRootNode = transformNode(defaultPrefix)
+
+      protected def transformLiteral: PartialFunction[Tree, Tree] = {
+        case NodeBuffer(transformRootNode.extract.forall(transformedNodes)) =>
+          q"$defaultPrefix.literal(..$transformedNodes)"
+        case transformRootNode.extract(transformedNode) =>
+          q"$defaultPrefix.literal($transformedNode)"
       }
 
-      protected def withChild(builder: Tree, child: Tree): Tree = {
-        q"$builder.withChild(${transformChild.applyOrElse(child, transformInterpolation)})"
+      protected def transformInterpolation(parentPrefix: Tree, expression: Tree): Tree = {
+        q"$parentPrefix.interpolation(${super.transform(expression)})"
       }
 
       override def transform(tree: Tree): Tree = {
-        transformXml.applyOrElse(tree, super.transform)
+        transformLiteral.applyOrElse(tree, super.transform)
       }
 
       protected def withDefaultPrefix(newPrefix: Tree) = new NameBasedXmlTransformer(newPrefix)
@@ -139,40 +164,25 @@ object nameBasedXml {
   *     case class attribute1(attributeValue: Any)
   *   }
   *   object elements {
-  *     case object tagName2 {
-  *       def build() = this
-  *       def withNodeList = this
-  *       def withoutNodeList = this
-  *       def apply(child: Any) = this
-  *     }
+  *     case class tagName2(attributesAndChildren: Any*)
   *   }
   * }
   * object xml {
+  *   case class literal[A](a: A*)
   *   object elements {
-  *     def tagName1 = TagName1()
-  *     case class TagName1(
-  *       attribute1Option: Option[Any] = None,
-  *       attribute2Option: Option[Any] = None,
-  *       prefix2Attribute3Option: Option[Any] = None
-  *     ) { self =>
-  *       def build() = this
-  *       def withNodeList = this
-  *       def withoutNodeList = this
-  *       object withAttribute {
-  *         def attribute1(attributeValue: Any) = self.copy(attribute1Option = Some(attributeValue))
-  *         def attribute2(attributeValue: Any) = self.copy(attribute2Option = Some(attributeValue))
-  *       }
-  *     }
+  *     case class tagName1(attributesAndChildren: Any*)
+  *   }
+  *   object attributes {
+  *     case class attribute1(attributeValue: Any)
+  *     case class attribute2(attributeValue: Any)
   *   }
   *   case class text(value: String)
   *   case class interpolation(expression: Any)
   * }
   *
   * object prefix2 {
-  *   object withAttribute {
-  *     case class attribute3[A](element: xml.elements.TagName1) {
-  *       def apply(attributeValue: Any) = element.copy(prefix2Attribute3Option = Some(attributeValue))
-  *     }
+  *   object attributes {
+  *     case class attribute3(attributeValue: Any)
   *   }
   * }
   * }}}
@@ -181,32 +191,38 @@ object nameBasedXml {
   * {{{
   * @nameBasedXml
   * def myXml = <tagName1/>
-  * myXml should be(xml.elements.tagName1)
+  * myXml should be(xml.literal(xml.elements.tagName1()))
   * }}}
   *
   * @example Self-closing tags with some prefixes
   * {{{
   * @nameBasedXml
   * def myXml = <prefix1:tagName2/>
-  * myXml should be(prefix1.elements.tagName2)
+  * myXml should be(xml.literal(prefix1.elements.tagName2()))
   * }}}
-  *
+  * 
+  * @example Node list
+  * {{{
+  * @nameBasedXml
+  * def myXml = <tagName1/><prefix1:tagName2/>
+  * myXml should be(xml.literal(xml.elements.tagName1(), prefix1.elements.tagName2()))
+  * }}}
   * @example Attributes
   * {{{
   * case class f()
   *
   * @nameBasedXml
-  * def myXml: xml.elements.TagName1 = <tagName1 attribute1="value"
+  * def myXml = <tagName1 attribute1="value"
   *   attribute2={ f() }
   *   prefix2:attribute3={"value"}
   * />
-  * myXml should be(
-  *   xml.elements.TagName1(
-  *     attribute1Option=Some(xml.text("value")),
-  *     attribute2Option=Some(xml.interpolation(f())),
-  *     prefix2Attribute3Option=Some(xml.interpolation("value")),
+  * myXml should be(xml.literal(
+  *   xml.elements.tagName1(
+  *     xml.attributes.attribute1(xml.text("value")),
+  *     xml.attributes.attribute2(xml.interpolation(f())),
+  *     prefix2.attributes.attribute3(xml.interpolation("value"))
   *   )
-  * )
+  * ))
   * }}}
   *
   * @see [[https://contributors.scala-lang.org/t/pre-sip-name-based-xml-literals/2175 Pre SIP: name based XML literals]]
