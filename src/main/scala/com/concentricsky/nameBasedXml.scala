@@ -40,26 +40,18 @@ object nameBasedXml {
 
     protected class NameBasedXmlTransformer(defaultPrefix: Tree) extends Transformer {
 
-      protected def tagBuilder(tagName: QName) = {
-        tagName match {
-          case PrefixedName(prefix, localPart) =>
-            q"${Ident(TermName(prefix))}.elements.${TermName(localPart)}"
-          case UnprefixedName(localPart) =>
-            q"$defaultPrefix.elements.${TermName(localPart)}"
+      protected def transformAttribute(parentPrefix: Tree, attributeName: QName, attributeValue: Tree) =
+        atPos(attributeValue.pos) {
+          val attributeFunction =
+            q"${prefixTree(parentPrefix, attributeName)}.attributes.${TermName(localName(attributeName))}"
+          attributeValue match {
+            case TextAttributes(textValues) =>
+              val transformedTexts = textValues.map(transformText(parentPrefix))
+              q"$attributeFunction(..$transformedTexts)"
+            case expression =>
+              q"$attributeFunction(${transformInterpolation(parentPrefix, expression)})"
+          }
         }
-      }
-
-      protected def transformAttribute(parentPrefix: Tree, attributeName: QName, attributeValue: Tree) = {
-        val attributeFunction =
-          q"${prefixTree(parentPrefix, attributeName)}.attributes.${TermName(localName(attributeName))}"
-        attributeValue match {
-          case TextAttributes(textValues) =>
-            val transformedTexts = textValues.map(transformText(parentPrefix))
-            q"$attributeFunction(..$transformedTexts)"
-          case expression =>
-            q"$attributeFunction(${transformInterpolation(parentPrefix,expression)})"
-        }
-      }
 
       private def localName(qName: QName) = qName match {
         case PrefixedName(prefix, localPart) =>
@@ -75,15 +67,15 @@ object nameBasedXml {
           defaultPrefix
       }
       protected def transformText(parentPrefix: Tree): PartialFunction[Tree, Tree] = {
-        case Text(value) =>
-          q"$parentPrefix.text($value)"
-        case EntityRef(entityName) =>
-          q"$parentPrefix.entities.${TermName(entityName)}"
+        case tree @ Text(value) =>
+          atPos(tree.pos)(q"$parentPrefix.text($value)")
+        case tree @ EntityRef(entityName) =>
+          atPos(tree.pos)(q"$parentPrefix.entities.${TermName(entityName)}")
       }
 
       protected def transformNode(parentPrefix: Tree): PartialFunction[Tree, Tree] = {
         transformText(parentPrefix).orElse {
-          case Elem(tagName, attributes, minimizeEmpty, children) =>
+          case tree @ Elem(tagName, attributes, minimizeEmpty, children) =>
             val prefix = prefixTree(defaultPrefix, tagName)
             val factory = q"$prefix.elements.${TermName(localName(tagName))}"
 
@@ -96,27 +88,27 @@ object nameBasedXml {
               transformNode(parentPrefix).applyOrElse(_, transformInterpolation(parentPrefix, _))
             }
 
-            q"$factory(..${transformedAttributes.toList}, ..$transformedChildren)"
-          case PCData(data) =>
-            q"$parentPrefix.cdata($data)"
-          case Comment(data) =>
-            q"$parentPrefix.comment($data)"
-          case ProcInstr(target, data) =>
-            q"$parentPrefix.processInstructions.${TermName(target)}($data)"
+            atPos(tree.pos)(q"$factory(..${transformedAttributes.toList}, ..$transformedChildren)")
+          case tree @ PCData(data) =>
+            atPos(tree.pos)(q"$parentPrefix.cdata($data)")
+          case tree @ Comment(data) =>
+            atPos(tree.pos)(q"$parentPrefix.comment($data)")
+          case tree @ ProcInstr(target, data) =>
+            atPos(tree.pos)(q"$parentPrefix.processInstructions.${TermName(target)}($data)")
         }
       }
 
       protected def transformRootNode = transformNode(defaultPrefix)
 
       protected def transformLiteral: PartialFunction[Tree, Tree] = {
-        case NodeBuffer(transformRootNode.extract.forall(transformedNodes)) =>
-          q"$defaultPrefix.literal(..$transformedNodes)"
-        case transformRootNode.extract(transformedNode) =>
-          q"$defaultPrefix.literal($transformedNode)"
+        case tree @ NodeBuffer(transformRootNode.extract.forall(transformedNodes)) =>
+          atPos(tree.pos)(q"$defaultPrefix.literal(..$transformedNodes)")
+        case tree @ transformRootNode.extract(transformedNode) =>
+          atPos(tree.pos)(q"$defaultPrefix.literal($transformedNode)")
       }
 
       protected def transformInterpolation(parentPrefix: Tree, expression: Tree): Tree = {
-        q"$parentPrefix.interpolation(${super.transform(expression)})"
+        atPos(expression.pos)(q"$parentPrefix.interpolation(${super.transform(expression)})")
       }
 
       override def transform(tree: Tree): Tree = {
@@ -200,7 +192,7 @@ object nameBasedXml {
   * def myXml = <prefix1:tagName2/>
   * myXml should be(xml.literal(prefix1.elements.tagName2()))
   * }}}
-  * 
+  *
   * @example Node list
   * {{{
   * @nameBasedXml
