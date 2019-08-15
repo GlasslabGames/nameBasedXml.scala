@@ -84,8 +84,10 @@ object nameBasedXml {
                 transformAttribute(parentPrefix, attributeName, attributeValue)
             }
 
+            def transformInterpolationWithCurrentParent(tree: Tree) = transformInterpolation(parentPrefix, tree)
+
             val transformedChildren = children.map {
-              transformNode(parentPrefix).applyOrElse(_, transformInterpolation(parentPrefix, _))
+              transformNode(parentPrefix).applyOrElse(_, transformInterpolationWithCurrentParent)
             }
 
             atPos(tree.pos)(q"$factory(..${transformedAttributes.toList}, ..$transformedChildren)")
