@@ -42,14 +42,15 @@ object nameBasedXml {
 
       protected def transformAttribute(parentPrefix: Tree, attributeName: QName, attributeValue: Tree) =
         atPos(attributeValue.pos) {
+          val prefix = q"${prefixTree(parentPrefix, attributeName)}.attribute"
           val attributeFunction =
-            q"${prefixTree(parentPrefix, attributeName)}.attributes.${TermName(localName(attributeName))}"
+            q"$prefix.names.${TermName(localName(attributeName))}"
           attributeValue match {
             case TextAttributes(textValues) =>
-              val transformedTexts = textValues.map(transformText(parentPrefix))
+              val transformedTexts = textValues.map(transformText(prefix))
               q"$attributeFunction(..$transformedTexts)"
             case expression =>
-              q"$attributeFunction(${transformInterpolation(parentPrefix, expression)})"
+              q"$attributeFunction(${transformInterpolation(prefix, expression)})"
           }
         }
 
@@ -68,16 +69,16 @@ object nameBasedXml {
       }
       protected def transformText(parentPrefix: Tree): PartialFunction[Tree, Tree] = {
         case tree @ Text(value) =>
-          atPos(tree.pos)(q"$parentPrefix.text($value)")
+          atPos(tree.pos)(q"$parentPrefix.values.${TermName(value)}")
         case tree @ EntityRef(entityName) =>
           atPos(tree.pos)(q"$parentPrefix.entities.${TermName(entityName)}")
       }
 
       protected def transformNode(parentPrefix: Tree): PartialFunction[Tree, Tree] = {
-        transformText(parentPrefix).orElse {
+        transformText(q"$parentPrefix.element").orElse {
           case tree @ Elem(tagName, attributes, minimizeEmpty, children) =>
             val prefix = prefixTree(defaultPrefix, tagName)
-            val factory = q"$prefix.elements.${TermName(localName(tagName))}"
+            val factory = q"$prefix.element.names.${TermName(localName(tagName))}"
 
             val transformedAttributes = attributes.view.reverse.map {
               case (attributeName, attributeValue) =>
@@ -153,30 +154,41 @@ object nameBasedXml {
   * will be transformed to calls to functions in `xml` object.
   *
   * {{{
-  * object prefix1 {
-  *   object withAttribute {
-  *     case class attribute1(attributeValue: Any)
+  * import scala.language.dynamics
+  * trait Values {
+  *   object values extends Dynamic {
+  *     def selectDynamic(value: String) = value
   *   }
-  *   object elements {
-  *     case class tagName2(attributesAndChildren: Any*)
+  *   case class interpolation(expression: Any)
+  * }
+  * 
+  * object prefix1 {
+  *   object element extends Values {
+  *     object names {
+  *       case class tagName2(attributesAndChildren: Any*)
+  *     }
   *   }
   * }
   * object xml {
   *   case class literal[A](a: A*)
-  *   object elements {
-  *     case class tagName1(attributesAndChildren: Any*)
+  *   object element extends Values {
+  *     object names {
+  *       case class tagName1(attributesAndChildren: Any*)
+  *     }
   *   }
-  *   object attributes {
-  *     case class attribute1(attributeValue: Any)
-  *     case class attribute2(attributeValue: Any)
+  *   object attribute extends Values {
+  *     object names {
+  *       case class attribute1(attributeValue: Any)
+  *       case class attribute2(attributeValue: Any)
+  *     }
   *   }
-  *   case class text(value: String)
-  *   case class interpolation(expression: Any)
   * }
   *
   * object prefix2 {
-  *   object attributes {
-  *     case class attribute3(attributeValue: Any)
+  *   object attribute extends Values {
+  *     object names {
+  *       case class attribute3(attributeValue: Any)
+  *     }
   *   }
   * }
   * }}}
@@ -185,21 +197,21 @@ object nameBasedXml {
   * {{{
   * @nameBasedXml
   * def myXml = <tagName1/>
-  * myXml should be(xml.literal(xml.elements.tagName1()))
+  * myXml should be(xml.literal(xml.element.names.tagName1()))
   * }}}
   *
   * @example Self-closing tags with some prefixes
   * {{{
   * @nameBasedXml
   * def myXml = <prefix1:tagName2/>
-  * myXml should be(xml.literal(prefix1.elements.tagName2()))
+  * myXml should be(xml.literal(prefix1.element.names.tagName2()))
   * }}}
   *
   * @example Node list
   * {{{
   * @nameBasedXml
   * def myXml = <tagName1/><prefix1:tagName2/>
-  * myXml should be(xml.literal(xml.elements.tagName1(), prefix1.elements.tagName2()))
+  * myXml should be(xml.literal(xml.element.names.tagName1(), prefix1.element.names.tagName2()))
   * }}}
   * @example Attributes
   * {{{
@@ -211,10 +223,10 @@ object nameBasedXml {
   *   prefix2:attribute3={"value"}
   * />
   * myXml should be(xml.literal(
-  *   xml.elements.tagName1(
-  *     xml.attributes.attribute1(xml.text("value")),
-  *     xml.attributes.attribute2(xml.interpolation(f())),
-  *     prefix2.attributes.attribute3(xml.interpolation("value"))
+  *   xml.element.names.tagName1(
+  *     xml.attribute.names.attribute1(xml.attribute.values.value),
+  *     xml.attribute.names.attribute2(xml.attribute.interpolation(f())),
+  *     prefix2.attribute.names.attribute3(prefix2.attribute.interpolation("value"))
   *   )
   * ))
   * }}}
