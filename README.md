@@ -44,7 +44,7 @@ will be translated to
 
 ``` scala
 xml.literal(
-  xml.elements.`tag-name`.withoutNodeList.build()
+  xml.elements.`tag-name`()
 )
 ```
 
@@ -122,7 +122,7 @@ xml.literal(
     xml.texts.` hexadecimal reference `,
     xml.entities.AMP,
     xml.texts.` decimal reference\n  `,
-    xml.elements.`child-1`.withoutNodeLis,
+    xml.elements.`child-1`(),
     xml.texts.`$u000A  `,
     xml.comment(" my comment "),
     xml.texts.`$u000A  `,
