@@ -83,7 +83,7 @@ xml.literal(
 
 #### CDATA
 
-`<![CDATA[ raw ]]>` will be translated to `xml.literal(xml.texts.` raw `)` if `-Xxml:coalescing` flag is on, or `xml.literal(xml.cdata(" raw "))` if the flag is turned off as `-Xxml:-coalescing` .
+`<![CDATA[raw]]>` will be translated to `xml.literal(xml.texts.raw)` if `-Xxml:coalescing` flag is on, or `xml.literal(xml.cdata("raw"))` if the flag is turned off as `-Xxml:-coalescing` .
 
 #### Process instructions
 
