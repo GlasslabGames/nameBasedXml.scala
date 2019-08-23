@@ -88,14 +88,14 @@ xml.literal(
 #### Process instructions
 
 ``` scala
-<?xml-stylesheet type="text/xsl" href="sty.xsl"?>
+<?xml-stylesheet type="text/xsl" href="style.xsl"?>
 ```
 
 will be translated to
 
 ``` scala
 xml.literal(
-  xml.processInstructions.`xml-stylesheet`("type=\"text/xsl\" href=\"sty.xsl\"")
+  xml.processInstructions.`xml-stylesheet`("type=\"text/xsl\" href=\"style.xsl\"")
 )
 ```
 
@@ -121,7 +121,7 @@ xml.literal(
     xml.entities.amp,
     xml.texts.` hexadecimal reference `,
     xml.entities.AMP,
-    xml.texts.` decimal reference\n  `,
+    xml.texts.` decimal reference$u000A  `,
     xml.elements.`child-1`(),
     xml.texts.`$u000A  `,
     xml.comment(" my comment "),
