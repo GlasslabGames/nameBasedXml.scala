@@ -44,21 +44,7 @@ will be translated to
 
 ``` scala
 xml.literal(
-  xml.elements.`tag-name`.withoutNodeList.build()
-)
-```
-
-#### Self-closing tags with some prefixes
-
-``` scala
-<prefix-1:tag-name />
-```
-
-will be translated to
-
-``` scala
-xml.literal(
-  `prefix-1`.elements.`tag-name`()
+  xml.elements.`tag-name`()
 )
 ```
 
@@ -81,8 +67,7 @@ xml.literal(
 
 ``` scala
 <tag-name attribute-1="value"
-          attribute-2={ f() }
-          prefix-2:attribute-3={"value"} />
+          attribute-2={ f() }/>
 ```
 
 will be translated to
@@ -90,30 +75,27 @@ will be translated to
 ``` scala
 xml.literal(
   xml.elements.`tag-name`(
-    xml.attributes.`attribute-1`("value")
+    xml.attributes.`attribute-1`(xml.values.value),
     xml.attributes.`attribute-2`(xml.interpolation(f()))
-    `prefix-2`.attributes.`attribute-3`(xml.interpolation("value"))
   )
 )
 ```
 
-Note that attributes with a prefix becomes function calls on the prefix, and attributes without a prefix becomes method calls on the builder.
-
 #### CDATA
 
-`<![CDATA[ raw ]]>` will be translated to `xml.literal(xml.text(" raw "))` if `-Xxml:coalescing` flag is on, or `xml.literal(xml.cdata(" raw "))` if the flag is turned off as `-Xxml:-coalescing` .
+`<![CDATA[raw]]>` will be translated to `xml.literal(xml.texts.raw)` if `-Xxml:coalescing` flag is on, or `xml.literal(xml.cdata("raw"))` if the flag is turned off as `-Xxml:-coalescing` .
 
 #### Process instructions
 
 ``` scala
-<?xml-stylesheet type="text/xsl" href="sty.xsl"?>
+<?xml-stylesheet type="text/xsl" href="style.xsl"?>
 ```
 
 will be translated to
 
 ``` scala
 xml.literal(
-  xml.processInstructions.`xml-stylesheet`("type=\"text/xsl\" href=\"sty.xsl\"")
+  xml.processInstructions.`xml-stylesheet`("type=\"text/xsl\" href=\"style.xsl\"")
 )
 ```
 
@@ -134,25 +116,81 @@ will be translated to
 ``` scala
 xml.literal(
   xml.elements.`tag-name`(
-    xml.`attribute-1`(xml.text("value")),
-    xml.text("\n  text "),
+    xml.attributes.`attribute-1`(xml.values.value),
+    xml.texts.`$u000A  text `,
     xml.entities.amp,
-    xml.text(" hexadecimal reference "),
+    xml.texts.` hexadecimal reference `,
     xml.entities.AMP,
-    xml.text(" decimal reference\n  "),
-    xml.elements.`child-1`.withoutNodeLis,
-    xml.text("\n  "),
+    xml.texts.` decimal reference$u000A  `,
+    xml.elements.`child-1`(),
+    xml.texts.`$u000A  `,
     xml.comment(" my comment "),
-    xml.text("\n  "),
+    xml.texts.`$u000A  `,
     xml.interpolation(math.random),
-    xml.text("\n  "),
-    xml.cdata(" raw "), //  or (xml.text(" raw ")), if `-Xxml:coalescing` flag is set
-    xml.text("\n  ")
+    xml.texts.`$u000A  `,
+    xml.cdata(" raw "), //  or (xml.texts.` raw `), if `-Xxml:coalescing` flag is set
+    xml.texts.`$u000A  `
   )
 )
 ```
 
-Note that hexadecimal references and decimal references will be unescaped and translated to `xml.text()` automatically, while entity references are translated to fields in `xml.entities` .
+Note that hexadecimal references and decimal references will be unescaped and translated to `xml.texts` automatically, while entity references are translated to fields in `xml.entities` .
+
+#### Prefixes without `xmlns` bindings.
+
+``` scala
+<prefix-1:tag-name-1 attribute-1="value-1" prefix-2:attribute-2="value-2">
+  <tag-name-2>content</tag-name-2>
+  <!-- my comment -->
+</prefix-1:tag-name-1>
+```
+
+will be translated to
+
+``` scala
+xml.literal(
+  `prefix-1`.elements.`tag-name-1`(
+    `prefix-1`.attributes.`attribute-1`(`prefix-1`.values.`value-1`),
+    `prefix-2`.attributes.`attribute-2`(`prefix-2`.values.`value-2`),
+    `prefix-1`.texts.`$u000A  `,
+    xml.elements.`tag-name-2`(
+      xml.texts.content
+    ),
+    `prefix-1`.texts.`$u000A  `,
+    `prefix-1`.comment(" my comment "),
+    `prefix-1`.texts.`$u000A`
+  )
+)
+```
+
+Note that unprefixed attribute will be treated as if it has the same prefix as its enclosing element.
+
+#### `xmlns` bindings.
+
+``` scala
+<prefix-1:tag-name-1 xmlns="http://example.com/0" xmlns:prefix-1="http://example.com/1" xmlns:prefix-2="http://example.com/2" attribute-1="value-1" prefix-2:attribute-2="value-2">
+  <tag-name-2>content</tag-name-2>
+  <!-- my comment -->
+</prefix-1:tag-name-1>
+```
+
+will be translated to
+
+``` scala
+xml.literal(
+  xml.prefixes.`prefix-1`(xml.uris.`http://example.com/1`).elements.`tag-name-1`(
+    xml.prefixes.`prefix-1`(xml.uris.`http://example.com/1`).attributes.`attribute-1`(xml.prefixes.`prefix-1`(xml.uris.`http://example.com/1`).values.`value-1`),
+    xml.prefixes.`prefix-2`(xml.uris.`http://example.com/2`).attributes.`attribute-2`(xml.prefixes.`prefix-2`(xml.uris.`http://example.com/2`).values.`value-2`),
+    xml.prefixes.`prefix-1`(xml.uris.`http://example.com/1`).texts.`$u000A  `,
+    xml.noPrefix(xml.uris.`http://example.com/0`).elements.`tag-name-2`(
+      xml.noPrefix(xml.uris.`http://example.com/0`).texts.content
+    ),
+    xml.prefixes.`prefix-1`(xml.uris.`http://example.com/1`).texts.`$u000A  `,
+    xml.prefixes.`prefix-1`(xml.uris.`http://example.com/1`).comment(" my comment "),
+    xml.prefixes.`prefix-1`(xml.uris.`http://example.com/1`).texts.`$u000A`
+  )
+)
+```
 
 ### XML library vendors
 
@@ -160,12 +198,16 @@ An XML library vendor should provide a package or object named `xml` , which con
 
 * elements
 * attributes
+* values
 * entities
 * processInstructions
-* text
+* texts
 * comment
 * cdata
 * interpolation
+* noPrefix
+* prefixes
+* uris
 * literal
 
 All above methods except `literal` should return a builder, and `literal` will turn one or more builders into an XML object / or an XML node list.
@@ -175,6 +217,8 @@ An XML library user can switch different implementations by importing different 
 In a schema-aware XML library like Binding.scala, its `elements` , `attributes` , `processInstructions` and `entities` methods should return factory objects that contain all the definitions of available tag names and attribute names. An XML library user can provide additional tag names and attribute names in user-defined implicit classes for `tags` and `attributes` .
 
 In a schema-less XML library like `scala-xml` , its `elements` , `attributes` , `processInstructions` and `entities` should return builders that extend [scala.Dynamic](https://www.scala-lang.org/api/current/scala/Dynamic.html) in order to handle tag names and attribute names in `selectDynamic` or `applyDynamic` .
+
+Those XML libraries can be extended with the help of standard XML namespace bindings. A plug-in author can create `implicit class` for `xml.uris` to introduce foreign elements embedded in existing XML literals.
 
 ### Known issues
 
