@@ -18,126 +18,6 @@ object nameBasedXml {
 
     private def encodedTermName(s: String) = TermName(encode(s.replace("$", "$u0024")))
 
-    // TODO: Move to [[com.thoughtworks.binding.XmlExtractor]]
-    private def nodeBufferStar(child: List[Tree]): List[Tree] = {
-      child match {
-        case Nil =>
-          Nil
-        case List(q"""${NodeBuffer(children)}: _*""") =>
-          children
-      }
-    }
-
-    // TODO: Move to [[com.thoughtworks.binding.XmlExtractor]]
-    private def prefix: PartialFunction[Tree, Option[String]] = {
-      case q"null"                      => None
-      case Literal(Constant(p: String)) => Some(p)
-    }
-
-    // TODO: Move to [[com.thoughtworks.binding.XmlExtractor]]
-    private val Prefix = prefix.extract
-
-    // TODO: Move to [[com.thoughtworks.binding.XmlExtractor]]
-    private def elemWithMetaData: PartialFunction[List[Tree], (QName, List[(QName, Tree)], Boolean, List[Tree])] = {
-      case q"var $$md: _root_.scala.xml.MetaData = _root_.scala.xml.Null" +:
-            (attributes :+
-            q"""
-              new _root_.scala.xml.Elem(
-                ${Prefix(prefixOption)},
-                ${Literal(Constant(localPart: String))},
-                $$md, $$scope,
-                ${Literal(Constant(minimizeEmpty: Boolean))},
-                ..$child
-              )
-            """) =>
-        (QName(prefixOption, localPart), attributes.map {
-          case q"""$$md = new _root_.scala.xml.UnprefixedAttribute(${Literal(Constant(key: String))}, $value, $$md)""" =>
-            UnprefixedName(key) -> value
-          case q"""$$md = new _root_.scala.xml.PrefixedAttribute(${Literal(Constant(pre: String))}, ${Literal(
-                Constant(key: String))}, $value, $$md)""" =>
-            PrefixedName(pre, key) -> value
-        }, minimizeEmpty, nodeBufferStar(child))
-      case Seq(
-          q"""
-            new _root_.scala.xml.Elem(
-              ${Prefix(prefixOption)},
-              ${Literal(Constant(localPart: String))},
-              _root_.scala.xml.Null,
-              $$scope,
-              ${Literal(Constant(minimizeEmpty: Boolean))},
-              ..$child
-            )
-          """
-          ) =>
-        (QName(prefixOption, localPart), Nil, minimizeEmpty, nodeBufferStar(child))
-    }
-
-    // TODO: Move to [[com.thoughtworks.binding.XmlExtractor]]
-    protected val ElemWithMetaData = elemWithMetaData.extract
-
-    // TODO: Move to [[com.thoughtworks.binding.XmlExtractor]]
-    private def elemWithNamespaceBindings
-      : PartialFunction[Tree,
-                        (QName, List[(Option[String] /*prefix*/, Tree)], List[(QName, Tree)], Boolean, List[Tree])] = {
-      case q"""{
-        var $$tmpscope: _root_.scala.xml.NamespaceBinding = $outerScope;
-        ..$xmlnses;
-        {
-          val $$scope: _root_.scala.xml.NamespaceBinding = $$tmpscope;
-          ..${ElemWithMetaData(tagName, attributes, minimizeEmpty, children)}
-        }
-      }""" =>
-        val namespaceBindings = xmlnses.map {
-          case q"$tmpscope = new _root_.scala.xml.NamespaceBinding($prefixOrNull, $uri, $$tmpscope);" =>
-            val prefixOption = prefixOrNull match {
-              case q"null" =>
-                None
-              case Literal(Constant(prefix: String)) =>
-                Some(prefix)
-            }
-            prefixOption -> uri
-        }
-        (tagName, namespaceBindings, attributes, minimizeEmpty, children)
-      case Block(Nil, q"{..${ElemWithMetaData(tagName, attributes, minimizeEmpty, children)}}") =>
-        (tagName, Nil, attributes, minimizeEmpty, children)
-    }
-    // TODO: Move to [[com.thoughtworks.binding.XmlExtractor]]
-    protected val ElemWithNamespaceBindings = elemWithNamespaceBindings.extract
-
-    // TODO: Move to [[com.thoughtworks.binding.XmlExtractor]]
-    private def textUris: PartialFunction[Tree, Seq[Tree]] = {
-      case text @ (Text(_) | EntityRef(_))                     => Seq(text)
-      case q"null"                                             => Nil
-      case NodeBuffer(texts @ ((Text(_) | EntityRef(_)) +: _)) => texts
-      case Literal(Constant(data: String))                     => Seq(q"new _root_.scala.xml.Text($data)")
-    }
-
-    // TODO: Move to [[com.thoughtworks.binding.XmlExtractor]]
-    protected final val TextUris = textUris.extract
-
-    // TODO: Move to [[com.thoughtworks.binding.XmlExtractor]]
-    private def textAttributes: PartialFunction[Tree, Seq[Tree]] = {
-      case text @ (Text(_) | EntityRef(_))                     => Seq(text)
-      case EmptyAttribute()                                    => Nil
-      case NodeBuffer(texts @ ((Text(_) | EntityRef(_)) +: _)) => texts
-    }
-
-    // TODO: Move to [[com.thoughtworks.binding.XmlExtractor]]
-    protected final val TextAttributes = textAttributes.extract
-
-    // TODO: Move to [[com.thoughtworks.binding.XmlExtractor]]
-    private def pcData: PartialFunction[Tree, String] = {
-      case q"""
-        new _root_.scala.xml.PCData(
-          ${Literal(Constant(data: String))}
-        )
-      """ =>
-        data
-    }
-
-    // TODO: Move to [[com.thoughtworks.binding.XmlExtractor]]
-    private final val PCData = pcData.extract
-
     protected class NameBasedXmlTransformer(vendors: Map[Option[String], Tree] = Map.empty) extends Transformer {
       protected def transformAttribute(parentVendor: Tree, attributeName: QName, attributeValue: Tree) =
         atPos(attributeValue.pos) {
@@ -226,7 +106,7 @@ object nameBasedXml {
 
       protected def transformNode(parentVendor: Tree): PartialFunction[Tree, Tree] = {
         transformChildText(q"$parentVendor").orElse {
-          case tree @ ElemWithNamespaceBindings(tagName, namespaceBindings, attributes, minimizeEmpty, children) =>
+          case tree @ Element(tagName, namespaceBindings, attributes, minimizeEmpty, children) =>
             val transformer = if (namespaceBindings.isEmpty) {
               this
             } else {
