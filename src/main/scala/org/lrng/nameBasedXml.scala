@@ -1,4 +1,4 @@
-package com.concentricsky
+package org.lrng
 
 import com.thoughtworks.Extractor._
 import com.thoughtworks.binding.XmlExtractor
