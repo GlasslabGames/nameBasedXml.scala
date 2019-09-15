@@ -1,4 +1,4 @@
-package org.lrng
+package org.lrng.binding
 
 import com.thoughtworks.Extractor._
 import com.thoughtworks.binding.XmlExtractor
