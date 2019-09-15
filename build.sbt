@@ -1,6 +1,6 @@
 name := "nameBasedXml"
 
-ThisBuild / organization := "org.lrng"
+ThisBuild / organization := "org.lrng.binding"
 
 libraryDependencies += "com.thoughtworks.extractor" %% "extractor" % "2.1.2"
 
