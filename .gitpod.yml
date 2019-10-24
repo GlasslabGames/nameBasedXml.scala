@@ -1,4 +1,4 @@
-image: hseeberger/scala-sbt:11.0.4_1.3.3_2.12.10
+image: hseeberger/scala-sbt:8u222_1.3.3_2.12.10
 vscode:
   extensions:
     - scala-lang.scala@0.3.8:wQBBM+lKILHBqOqlqW60xA==
