@@ -2,7 +2,7 @@ name := "nameBasedXml"
 
 ThisBuild / organization := "org.lrng.binding"
 
-libraryDependencies += "com.thoughtworks.extractor" %% "extractor" % "2.1.2"
+libraryDependencies += "com.thoughtworks.extractor" %% "extractor" % "2.1.3"
 
 libraryDependencies += "com.thoughtworks.binding" %% "xmlextractor" % {
   import Ordering.Implicits._
