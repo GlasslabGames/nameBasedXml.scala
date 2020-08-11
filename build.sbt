@@ -37,4 +37,4 @@ libraryDependencies ++= {
 
 enablePlugins(Example)
 
-libraryDependencies += "org.scalatest" %% "scalatest" % "3.1.2" % Test
+libraryDependencies += "org.scalatest" %% "scalatest" % "3.1.3" % Test
