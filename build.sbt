@@ -13,7 +13,7 @@ libraryDependencies += "com.thoughtworks.binding" %% "xmlextractor" % {
   }
 }
 
-libraryDependencies += "org.scala-lang.modules" %% "scala-xml" % "1.3.0"
+libraryDependencies += "org.scala-lang.modules" %% "scala-xml" % "1.3.1"
 
 // Enable macro annotation by scalac flags for Scala 2.13
 scalacOptions ++= {
